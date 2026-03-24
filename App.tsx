@@ -184,10 +184,10 @@ export default function App() {
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           
-          {/* Protected Routes (Bypassed Login) */}
-          <Route path="/update-order/:orderId/:status" element={<UpdateOrderStatus />} />
-          <Route path="/bar" element={<BarPanel />} />
-          <Route path="/admin" element={<AdminDashboard />} />
+          {/* Protected Routes */}
+          <Route path="/update-order/:orderId/:status" element={user ? <UpdateOrderStatus /> : <Navigate to="/login" />} />
+          <Route path="/bar" element={user && (role === 'admin' || role === 'bar') ? <BarPanel /> : <Navigate to="/login" />} />
+          <Route path="/admin" element={user && role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
           
           {/* Default Redirect */}
           <Route path="/" element={<Home />} />

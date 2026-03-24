@@ -37,9 +37,9 @@ export const Login: React.FC = () => {
 
     let loginEmail = email.trim();
     if (loginEmail.toLowerCase() === 'esquinaadm') {
-      loginEmail = 'allan@quintaldoallan.com';
+      loginEmail = 'esquinaadm@esquina60.com';
     } else if (loginEmail.toLowerCase() === 'esquinabar') {
-      loginEmail = 'allanbar@quintaldoallan.com';
+      loginEmail = 'esquinabar@esquina60.com';
     }
 
     try {
