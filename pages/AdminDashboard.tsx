@@ -913,7 +913,17 @@ export const AdminDashboard: React.FC = () => {
                 {products
                   .filter(p => activeTab === 'rosh' ? p.department === 'rosh' : (p.department === 'bar' || !p.department))
                   .map((product) => (
-                  <div key={product.id} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl group">
+                  <div key={product.id} className="bg-white/5 border border-white/10 rounded-[2.5rem] backdrop-blur-xl group overflow-hidden">
+                    {product.imageUrl && (
+                      <div className="w-full h-48 overflow-hidden">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      </div>
+                    )}
+                    <div className="p-8">
                     <div className="flex items-start justify-between mb-8">
                       <div className="flex-1">
                         <h3 className="text-xl font-bold mb-1">{product.name}</h3>
@@ -1022,6 +1032,7 @@ export const AdminDashboard: React.FC = () => {
                           {product.isAvailable ? 'Em Estoque' : 'Esgotado'}
                         </span>
                       </div>
+                    </div>
                     </div>
                   </div>
                 ))}

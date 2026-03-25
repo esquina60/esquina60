@@ -431,24 +431,35 @@ export const ClientView: React.FC = () => {
                   <motion.div
                     key={product.id}
                     whileTap={{ scale: 0.98 }}
-                    className="glass rounded-2xl overflow-hidden flex flex-col p-5 group"
+                    className="glass rounded-2xl overflow-hidden flex flex-col group"
                   >
-                    <div className="flex items-start justify-between gap-4 mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-display font-bold text-lg text-white leading-tight mb-1">{product.name}</h3>
-                        <p className="text-sm text-white uppercase tracking-wider font-bold leading-relaxed">{product.description}</p>
+                    {product.imageUrl && (
+                      <div className="w-full h-44 overflow-hidden">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
                       </div>
-                      <div className="text-right">
-                        <span className="text-white font-bold text-lg block">R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    )}
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4 mb-2">
+                        <div className="flex-1">
+                          <h3 className="font-display font-bold text-lg text-white leading-tight mb-1">{product.name}</h3>
+                          <p className="text-sm text-white uppercase tracking-wider font-bold leading-relaxed">{product.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-white font-bold text-lg block">R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-end mt-2">
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="bg-white text-black px-6 py-2 rounded-xl hover:bg-neutral-200 transition-all shadow-lg flex items-center gap-2 font-bold text-xs uppercase tracking-widest"
-                      >
-                        <Plus size={16} /> Adicionar
-                      </button>
+                      <div className="flex items-center justify-end mt-2">
+                        <button
+                          onClick={() => addToCart(product)}
+                          className="bg-white text-black px-6 py-2 rounded-xl hover:bg-neutral-200 transition-all shadow-lg flex items-center gap-2 font-bold text-xs uppercase tracking-widest"
+                        >
+                           <Plus size={16} /> Adicionar
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
