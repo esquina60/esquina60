@@ -20,6 +20,7 @@ export interface Product {
   imageUrl: string;
   isAvailable: boolean;
   category: string;
+  department?: 'bar' | 'rosh';
 }
 
 export interface Camarote {
@@ -52,6 +53,7 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  department?: 'bar' | 'rosh';
   notes?: string;
 }
 
@@ -64,6 +66,7 @@ export interface Order {
   status: OrderStatus;
   total: number;
   notes?: string;
+  department?: 'bar' | 'rosh';
   createdAt: any;
 }
 

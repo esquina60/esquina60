@@ -70,7 +70,7 @@ export const AdminDashboard: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [isNightClosureModalOpen, setIsNightClosureModalOpen] = useState(false);
   const [showClosureSuccess, setShowClosureSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'promotions' | 'staff' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'rosh' | 'promotions' | 'staff' | 'settings'>('overview');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -355,7 +355,8 @@ export const AdminDashboard: React.FC = () => {
         category: newProductCategory,
         imageUrl: newProductImage || `https://picsum.photos/seed/${newProductName}/400/400`,
         isAvailable: true,
-        description: newProductDescription
+        description: newProductDescription,
+        department: activeTab === 'rosh' ? 'rosh' : 'bar'
       }]);
       setNewProductName('');
       setNewProductPrice(0);
@@ -522,9 +523,10 @@ export const AdminDashboard: React.FC = () => {
                 {[
                   { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
                   { id: 'camarotes', label: 'Camarotes', icon: Users },
-                  { id: 'menu', label: 'Cardápio', icon: Package },
+                  { id: 'menu', label: 'Cardápio Bar', icon: Package },
+                  { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
                   { id: 'staff', label: 'Funcionários', icon: UserCog },
-                  { id: 'promotions', label: 'Promoções', icon: Zap },
+                  { id: 'promotions', label: 'Promoções', icon: Megaphone },
                   { id: 'settings', label: 'Configurações', icon: Settings },
                 ].map(tab => (
                   <button
@@ -588,9 +590,10 @@ export const AdminDashboard: React.FC = () => {
           {[
             { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
             { id: 'camarotes', label: 'Camarotes', icon: Users },
-            { id: 'menu', label: 'Cardápio', icon: Package },
+            { id: 'menu', label: 'Cardápio Bar', icon: Package },
+            { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
             { id: 'staff', label: 'Funcionários', icon: UserCog },
-            { id: 'promotions', label: 'Promoções', icon: Zap },
+            { id: 'promotions', label: 'Promoções', icon: Megaphone },
             { id: 'settings', label: 'Configurações', icon: Settings },
           ].map(tab => (
             <button
@@ -789,7 +792,7 @@ export const AdminDashboard: React.FC = () => {
             </motion.div>
           )}
 
-          {activeTab === 'menu' && (
+          {(activeTab === 'menu' || activeTab === 'rosh') && (
             <motion.div
               key="menu"
               initial={{ opacity: 0, y: 20 }}
@@ -798,7 +801,7 @@ export const AdminDashboard: React.FC = () => {
               className="space-y-8"
             >
               <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl">
-                <h2 className="text-2xl font-bold mb-6">Adicionar Novo Produto</h2>
+                <h2 className="text-2xl font-bold mb-6">{activeTab === 'rosh' ? 'Adicionar Novo Rosh' : 'Adicionar Novo Produto'}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                   <div className="space-y-2">
                     <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">Nome</p>
@@ -837,15 +840,24 @@ export const AdminDashboard: React.FC = () => {
                       onChange={(e) => setNewProductCategory(e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all appearance-none"
                     >
-                      <option className="bg-night-900 text-white" value="combos de whisky">Combos de Whisky</option>
-                      <option className="bg-night-900 text-white" value="combos de gin">Combos de Gin</option>
-                      <option className="bg-night-900 text-white" value="combos de vodka">Combos de Vodka</option>
-                      <option className="bg-night-900 text-white" value="doses de whisky">Doses de Whisky</option>
-                      <option className="bg-night-900 text-white" value="doses de gin">Doses de Gin</option>
-                      <option className="bg-night-900 text-white" value="doses de vodka">Doses de Vodka</option>
-                      <option className="bg-night-900 text-white" value="cervejas 600ml">Cervejas 600ml</option>
-                      <option className="bg-night-900 text-white" value="cervejas long neck">Cervejas Long Neck</option>
-                      <option className="bg-night-900 text-white" value="ROSH">ROSH</option>
+                      {activeTab === 'rosh' ? (
+                        <>
+                          <option className="bg-night-900 text-white" value="tradicional">Tradicional</option>
+                          <option className="bg-night-900 text-white" value="premium">Premium</option>
+                          <option className="bg-night-900 text-white" value="especial da casa">Especial da Casa</option>
+                        </>
+                      ) : (
+                        <>
+                          <option className="bg-night-900 text-white" value="combos de whisky">Combos de Whisky</option>
+                          <option className="bg-night-900 text-white" value="combos de gin">Combos de Gin</option>
+                          <option className="bg-night-900 text-white" value="combos de vodka">Combos de Vodka</option>
+                          <option className="bg-night-900 text-white" value="doses de whisky">Doses de Whisky</option>
+                          <option className="bg-night-900 text-white" value="doses de gin">Doses de Gin</option>
+                          <option className="bg-night-900 text-white" value="doses de vodka">Doses de Vodka</option>
+                          <option className="bg-night-900 text-white" value="cervejas 600ml">Cervejas 600ml</option>
+                          <option className="bg-night-900 text-white" value="cervejas long neck">Cervejas Long Neck</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div className="space-y-2 lg:col-span-2">
@@ -898,7 +910,9 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => (
+                {products
+                  .filter(p => activeTab === 'rosh' ? p.department === 'rosh' : (p.department === 'bar' || !p.department))
+                  .map((product) => (
                   <div key={product.id} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl group">
                     <div className="flex items-start justify-between mb-8">
                       <div className="flex-1">

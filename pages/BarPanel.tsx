@@ -19,6 +19,7 @@ export const BarPanel: React.FC = () => {
   const ordersRef = React.useRef<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [activeDepartment, setActiveDepartment] = useState<'bar' | 'rosh'>('bar');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -207,24 +208,52 @@ export const BarPanel: React.FC = () => {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-          {/* Main Content: Orders (3 Columns) */}
-          <div className="xl:col-span-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Column: NEW */}
-              <div className="space-y-6">
-                <div className="flex items-center justify-between px-6 py-4 bg-white/5 rounded-3xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <Clock size={16} className="text-white/20" />
-                    <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Solicitados</h2>
+          {/* Department Tabs */}
+          <div className="flex gap-4 mb-8">
+            <button
+              onClick={() => setActiveDepartment('bar')}
+              className={`flex-1 py-6 rounded-3xl font-black uppercase tracking-[0.2em] transition-all border ${
+                activeDepartment === 'bar' 
+                  ? 'bg-white text-black border-white shadow-2xl shadow-white/10' 
+                  : 'bg-white/5 text-white/40 border-white/5 hover:bg-white/10'
+              }`}
+            >
+              BAR / BEBIDAS
+            </button>
+            <button
+              onClick={() => setActiveDepartment('rosh')}
+              className={`flex-1 py-6 rounded-3xl font-black uppercase tracking-[0.2em] transition-all border ${
+                activeDepartment === 'rosh' 
+                  ? 'bg-zap-500 text-white border-zap-500 shadow-2xl shadow-zap-500/20' 
+                  : 'bg-white/5 text-white/40 border-white/5 hover:bg-white/10'
+              }`}
+            >
+              ROSH / NARGUILE
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+            {/* Main Content: Orders (3 Columns) */}
+            <div className="xl:col-span-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Column: NEW */}
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between px-6 py-4 bg-white/5 rounded-3xl border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <Clock size={16} className="text-white/20" />
+                      <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Solicitados</h2>
+                    </div>
+                    <span className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-bold">
+                      {orders.filter(o => o.status === 'new' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department))).length}
+                    </span>
                   </div>
-                  <span className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-bold">{orders.filter(o => o.status === 'new').length}</span>
-                </div>
-                
-                <div className="space-y-4">
-                  <AnimatePresence mode="popLayout">
-                    {orders.filter(o => o.status === 'new').map((order) => (
-                      <motion.div
+                  
+                  <div className="space-y-4">
+                    <AnimatePresence mode="popLayout">
+                      {orders
+                        .filter(o => o.status === 'new' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department)))
+                        .map((order) => (
+                          <motion.div
                         key={order.id}
                         layout
                         initial={{ opacity: 0, scale: 0.95 }}
@@ -258,12 +287,16 @@ export const BarPanel: React.FC = () => {
                     <Clock size={16} className="animate-spin" />
                     <h2 className="text-xs font-black uppercase tracking-[0.2em]">Em Preparo</h2>
                   </div>
-                  <span className="bg-black/10 px-3 py-1 rounded-full text-[10px] font-bold">{orders.filter(o => o.status === 'preparing').length}</span>
+                  <span className="bg-black/10 px-3 py-1 rounded-full text-[10px] font-bold">
+                    {orders.filter(o => o.status === 'preparing' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department))).length}
+                  </span>
                 </div>
                 
                 <div className="space-y-4">
                   <AnimatePresence mode="popLayout">
-                    {orders.filter(o => o.status === 'preparing').map((order) => (
+                    {orders
+                      .filter(o => o.status === 'preparing' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department)))
+                      .map((order) => (
                       <motion.div
                         key={order.id}
                         layout
@@ -298,12 +331,17 @@ export const BarPanel: React.FC = () => {
                     <Check size={16} />
                     <h2 className="text-xs font-black uppercase tracking-[0.2em]">Entregues</h2>
                   </div>
-                  <span className="bg-emerald-500/10 px-3 py-1 rounded-full text-[10px] font-bold">{orders.filter(o => o.status === 'done').length}</span>
+                  <span className="bg-emerald-500/10 px-3 py-1 rounded-full text-[10px] font-bold">
+                    {orders.filter(o => o.status === 'done' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department))).length}
+                  </span>
                 </div>
                 
                 <div className="space-y-4">
                   <AnimatePresence mode="popLayout">
-                    {orders.filter(o => o.status === 'done').slice(0, 10).map((order) => (
+                    {orders
+                      .filter(o => o.status === 'done' && (activeDepartment === 'rosh' ? o.department === 'rosh' : (o.department === 'bar' || !o.department)))
+                      .slice(0, 10)
+                      .map((order) => (
                       <motion.div
                         key={order.id}
                         layout
@@ -336,7 +374,9 @@ export const BarPanel: React.FC = () => {
                 <Package size={14} /> Estoque
               </h2>
               <div className="space-y-3">
-                {products.map(product => (
+                {products
+                  .filter(product => activeDepartment === 'rosh' ? product.department === 'rosh' : (product.department === 'bar' || !product.department))
+                  .map(product => (
                   <div key={product.id} className="flex items-center justify-between group">
                     <div>
                       <h4 className="font-bold text-white text-sm group-hover:text-white/80 transition-colors">{product.name}</h4>

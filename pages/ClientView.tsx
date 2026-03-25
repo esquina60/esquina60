@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../supabase';
-import { Product, Camarote, Order, OrderItem, OperationType, Challenge, Promotion } from '../types';
+import { Product, Camarote, Order, OrderItem, OperationType, Challenge, Promotion, OrderStatus } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
 import { Ranking } from '../components/Ranking';
 import { Howl } from 'howler';
@@ -195,11 +195,18 @@ export const ClientView: React.FC = () => {
 
   const addToCart = (product: Product) => {
     setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id && !item.notes);
+      const existing = prev.find(item => item.productId === product.id && item.notes === '');
       if (existing) {
-        return prev.map(item => (item.productId === product.id && !item.notes) ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => (item.productId === product.id && item.notes === '') ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      return [...prev, { productId: product.id, name: product.name, price: product.price, quantity: 1, notes: '' }];
+      return [...prev, { 
+        productId: product.id, 
+        name: product.name, 
+        price: product.price, 
+        quantity: 1, 
+        department: product.department || 'bar',
+        notes: '' 
+      }];
     });
   };
 
@@ -226,30 +233,41 @@ export const ClientView: React.FC = () => {
   const placeOrder = async () => {
     if (!camarote || cart.length === 0) return;
     try {
-      const orderData = {
-        camaroteId: camarote.id,
-        camaroteName: camarote.name,
-        items: cart,
-        status: 'new',
-        total: cartTotal,
-        notes: orderNotes
-      };
-      
-      const { data: docRef, error } = await supabase.from('orders').insert([orderData]).select().single();
-      
-      if (error) throw error;
+      // Group items by department
+      const itemsByDept = cart.reduce((acc, item) => {
+        const dept = item.department || 'bar';
+        if (!acc[dept]) acc[dept] = [];
+        acc[dept].push(item);
+        return acc;
+      }, {} as Record<string, OrderItem[]>);
+
+      // Create one order per department
+      for (const [dept, items] of Object.entries(itemsByDept)) {
+        const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const orderData = {
+          camaroteId: camarote.id,
+          camaroteName: camarote.name,
+          items,
+          status: 'new' as OrderStatus,
+          total,
+          notes: orderNotes,
+          department: dept as 'bar' | 'rosh',
+          establishmentId: 'default'
+        };
+        
+        const { error } = await supabase.from('orders').insert([orderData]);
+        if (error) throw error;
+      }
       
       setCart([]);
       setOrderNotes('');
       setIsCartOpen(false);
       setIsOrdersOpen(true);
       
-      // We'll highlight the new order in the UI or provide a specific WhatsApp button
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'orders');
     }
   };
-
   const sendOrderToWhatsapp = (order: Order) => {
     if (!whatsappNumber) return;
     const cleanWhatsapp = whatsappNumber.replace(/\D/g, '');
@@ -371,7 +389,7 @@ export const ClientView: React.FC = () => {
 
         {/* Category Tabs */}
         <div className="flex overflow-x-auto pb-4 mb-6 gap-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          {['Todos', ...Array.from(new Set(products.map(p => p.category || 'Outros')))].map(category => (
+          {['Todos', 'NARGUILE ROSH', ...Array.from(new Set(products.filter(p => !p.department || p.department === 'bar').map(p => p.category || 'Outros')))].map(category => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
@@ -390,9 +408,13 @@ export const ClientView: React.FC = () => {
         <div className="space-y-10">
           {Object.entries(
             products
-              .filter(p => activeCategory === 'Todos' || (p.category || 'Outros') === activeCategory)
+              .filter(p => {
+                if (activeCategory === 'Todos') return true;
+                if (activeCategory === 'NARGUILE ROSH') return p.department === 'rosh';
+                return p.category === activeCategory && (p.department === 'bar' || !p.department);
+              })
               .reduce((acc, product) => {
-              const cat = product.category || 'Outros';
+              const cat = product.department === 'rosh' ? 'NARGUILE ROSH' : (product.category || 'Outros');
               if (!acc[cat]) acc[cat] = [];
               acc[cat].push(product);
               return acc;
