@@ -33,7 +33,9 @@ import {
   EyeOff,
   Key,
   UserCog,
-  MessageSquare
+  MessageSquare,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from '../components/Logo';
@@ -58,6 +60,8 @@ export const AdminDashboard: React.FC = () => {
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editImage, setEditImage] = useState<string>('');
   const [editDescription, setEditDescription] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [closingCamarote, setClosingCamarote] = useState<Camarote | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [camaroteToDelete, setCamaroteToDelete] = useState<Camarote | null>(null);
@@ -296,6 +300,33 @@ export const AdminDashboard: React.FC = () => {
       setPromoToDelete(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `promotions/${id}`);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `product-images/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('products')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Erro ao fazer upload da imagem. Verifique o bucket "products" no Supabase.');
+      return null;
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -817,20 +848,48 @@ export const AdminDashboard: React.FC = () => {
                       <option className="bg-night-900 text-white" value="ROSH">ROSH</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">URL da Imagem</p>
-                    <input
-                      type="text"
-                      placeholder="https://..."
-                      value={newProductImage}
-                      onChange={(e) => setNewProductImage(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
-                    />
+                  <div className="space-y-2 lg:col-span-2">
+                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">Imagem do Produto</p>
+                    <div className="flex gap-4">
+                      {newProductImage || uploadPreview ? (
+                        <div className="w-[46px] h-[46px] rounded-2xl overflow-hidden border border-white/10 flex-shrink-0">
+                          <img src={uploadPreview || newProductImage} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-[46px] h-[46px] rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 text-white/20">
+                          <ImageIcon size={20} />
+                        </div>
+                      )}
+                      <label className="flex-1 cursor-pointer">
+                        <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-2 h-[46px]">
+                          {isUploading ? <Clock className="animate-spin" size={18} /> : <Upload size={18} />}
+                          <span className="truncate">{isUploading ? 'Subindo...' : 'Upload Imagem'}</span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const previewUrl = URL.createObjectURL(file);
+                              setUploadPreview(previewUrl);
+                              const uploadedUrl = await handleImageUpload(file);
+                              if (uploadedUrl) setNewProductImage(uploadedUrl);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                   <div className="flex items-end">
                     <button
-                      onClick={createProduct}
-                      className="w-full bg-white text-black h-[46px] rounded-2xl font-bold hover:bg-white/90 transition-all flex items-center justify-center gap-2"
+                      onClick={() => {
+                        createProduct();
+                        setUploadPreview(null);
+                      }}
+                      disabled={isUploading}
+                      className="w-full bg-white text-black h-[46px] rounded-2xl font-bold hover:bg-white/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <Plus size={20} /> Adicionar
                     </button>
@@ -863,9 +922,35 @@ export const AdminDashboard: React.FC = () => {
                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white h-24 resize-none focus:outline-none focus:border-white/20"
                               />
                             </div>
+                            <div className="space-y-1">
+                              <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest ml-2">Imagem</p>
+                              <div className="flex gap-2">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+                                  <img src={editImage} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                                <label className="flex-1 cursor-pointer">
+                                  <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-[10px] hover:bg-white/10 transition-all flex items-center justify-center gap-1 h-10 font-bold uppercase tracking-widest">
+                                    {isUploading ? <Clock className="animate-spin" size={12} /> : <Upload size={12} />}
+                                    {isUploading ? '...' : 'Trocar'}
+                                  </div>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const uploadedUrl = await handleImageUpload(file);
+                                        if (uploadedUrl) setEditImage(uploadedUrl);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
                             <div className="flex gap-2 pt-2">
                               <button 
-                                onClick={() => updateProduct(product.id, { price: editPrice, description: editDescription })} 
+                                onClick={() => updateProduct(product.id, { price: editPrice, description: editDescription, imageUrl: editImage })} 
                                 className="flex-1 bg-white text-black py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest"
                               >
                                 Salvar

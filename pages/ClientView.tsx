@@ -5,7 +5,7 @@ import { Product, Camarote, Order, OrderItem, OperationType, Challenge, Promotio
 import { handleFirestoreError } from '../utils/error-handler';
 import { Ranking } from '../components/Ranking';
 import { Howl } from 'howler';
-import { ShoppingCart, Package, Check, Clock, Plus, Minus, X, AlertCircle, Swords, Trophy, Send, Bell, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Package, Check, Clock, Plus, Minus, X, AlertCircle, Swords, Trophy, Send, Bell, ChevronRight, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from '../components/Logo';
 
@@ -239,34 +239,34 @@ export const ClientView: React.FC = () => {
       
       if (error) throw error;
       
-      // WhatsApp Notification
-      if (whatsappNumber && docRef) {
-        const cleanWhatsapp = whatsappNumber.replace(/\D/g, '');
-        const itemsText = cart.map(item => `• ${item.quantity}x ${item.name}${item.notes ? ` (Obs: ${item.notes})` : ''}`).join('\n');
-        const totalText = cartTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const message = `*NOVO PEDIDO - ESQUINA60*\n\n` +
-                        `*Camarote:* ${camarote.name}\n` +
-                        `*Pedido:* #${docRef.id.slice(-6).toUpperCase()}\n\n` +
-                        `*Itens:*\n${itemsText}\n\n` +
-                        `*Total:* ${totalText}\n` +
-                        `${orderNotes ? `*Obs Geral:* ${orderNotes}\n` : ''}\n` +
-                        `-------------------\n` +
-                        `*Atualizar Status:*\n` +
-                        `👉 Preparar: ${window.location.origin}/update-order/${docRef.id}/preparing\n` +
-                        `👉 Finalizar: ${window.location.origin}/update-order/${docRef.id}/done`;
-        
-        const encodedMessage = encodeURIComponent(message);
-        const whatsappUrl = `https://wa.me/${cleanWhatsapp}?text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-      }
-
       setCart([]);
       setOrderNotes('');
       setIsCartOpen(false);
       setIsOrdersOpen(true);
+      
+      // We'll highlight the new order in the UI or provide a specific WhatsApp button
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'orders');
     }
+  };
+
+  const sendOrderToWhatsapp = (order: Order) => {
+    if (!whatsappNumber) return;
+    const cleanWhatsapp = whatsappNumber.replace(/\D/g, '');
+    const itemsText = order.items.map(item => `• ${item.quantity}x ${item.name}${item.notes ? ` (Obs: ${item.notes})` : ''}`).join('\n');
+    const totalText = order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const message = `*PEDIDO REALIZADO - ESQUINA60*\n\n` +
+                    `*Camarote:* ${camarote?.name}\n` +
+                    `*Pedido:* #${order.id.slice(-6).toUpperCase()}\n\n` +
+                    `*Itens:*\n${itemsText}\n\n` +
+                    `*Total:* ${totalText}\n` +
+                    `${order.notes ? `*Obs Geral:* ${order.notes}\n` : ''}\n` +
+                    `-------------------\n` +
+                    `Link para acompanhar: ${window.location.href}`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${cleanWhatsapp}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-night-950 text-white font-logo tracking-widest">CARREGANDO...</div>;
@@ -414,7 +414,7 @@ export const ClientView: React.FC = () => {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex-1">
                         <h3 className="font-display font-bold text-lg text-white leading-tight mb-1">{product.name}</h3>
-                        <p className="text-xs text-white/40 uppercase tracking-wider font-medium leading-relaxed">{product.description}</p>
+                        <p className="text-sm text-white uppercase tracking-wider font-bold leading-relaxed">{product.description}</p>
                       </div>
                       <div className="text-right">
                         <span className="text-white font-bold text-lg block">R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
@@ -496,8 +496,8 @@ export const ClientView: React.FC = () => {
                     <div key={`${item.productId}-${idx}`} className="glass p-5 rounded-2xl space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-bold text-white">{item.name}</h4>
-                          <p className="text-white/40 text-xs font-bold mt-1">R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <h4 className="font-bold text-white text-lg">{item.name}</h4>
+                          <p className="text-white/80 text-sm font-bold mt-1">R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-3 bg-white/5 rounded-xl p-1 border border-white/10">
@@ -674,8 +674,15 @@ export const ClientView: React.FC = () => {
                   <p className="font-logo text-xl tracking-widest uppercase">Sem Pedidos</p>
                 </div>
               ) : (
-                orders.map(order => (
+                orders.map((order, orderIdx) => (
                   <div key={order.id} className="glass p-6 rounded-2xl border border-white/5 relative overflow-hidden">
+                    {/* New Order Highlight */}
+                    {orderIdx === 0 && order.status === 'new' && (
+                      <div className="absolute top-0 right-0 bg-blue-500 text-white px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                        Novo
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between items-start mb-6">
                       <div>
                         <p className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mb-1">Pedido #{order.id.slice(-4).toUpperCase()}</p>
@@ -697,25 +704,37 @@ export const ClientView: React.FC = () => {
                       {order.items.map((item, idx) => (
                         <div key={idx} className="flex flex-col">
                           <div className="flex justify-between items-center">
-                            <span className="text-sm font-bold text-white">{item.quantity}x {item.name}</span>
-                            <span className="text-xs text-white/40 font-medium">R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-base font-bold text-white">{item.quantity}x {item.name}</span>
+                            <span className="text-sm text-white/70 font-medium">R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                           {item.notes && (
-                            <p className="text-[10px] text-white/30 italic mt-1 ml-4 border-l border-white/10 pl-2">Obs: {item.notes}</p>
+                            <p className="text-xs text-white/60 italic mt-1 ml-4 border-l border-white/20 pl-2">Obs: {item.notes}</p>
                           )}
                         </div>
                       ))}
                       {order.notes && (
-                        <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/5">
-                          <p className="text-[8px] text-white/20 uppercase font-bold mb-1 tracking-widest">Observação Geral:</p>
-                          <p className="text-xs text-white/60 font-medium">{order.notes}</p>
+                        <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/10">
+                          <p className="text-[10px] text-white/40 uppercase font-bold mb-1 tracking-widest">Observação Geral:</p>
+                          <p className="text-sm text-white/80 font-medium">{order.notes}</p>
                         </div>
                       )}
                     </div>
                     
-                    <div className="pt-4 border-t border-white/5 flex justify-between items-center">
-                      <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Total</span>
-                      <span className="text-lg font-display font-bold text-white">R$ {order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <div className="pt-4 border-t border-white/5 flex flex-col gap-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Total</span>
+                        <span className="text-2xl font-display font-bold text-white">R$ {order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      {/* WhatsApp Button */}
+                      {order.status === 'new' && (
+                        <button
+                          onClick={() => sendOrderToWhatsapp(order)}
+                          className="w-full bg-[#25D366] text-white py-3 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-all"
+                        >
+                          <MessageSquare size={16} /> Enviar Pedido via WhatsApp
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
