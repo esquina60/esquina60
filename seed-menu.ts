@@ -96,7 +96,7 @@ async function seed() {
   console.log('Connecting to Supabase...');
   
   // First, completely delete all products
-  const { error: delErr } = await supabase.from('products').delete().neq('id', '0');
+  const { error: delErr } = await supabase.from('products').delete().neq('name', '___NON_EXISTENT___');
   if (delErr) {
     console.error('Error deleting products:', delErr);
   } else {

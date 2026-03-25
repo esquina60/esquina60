@@ -105,18 +105,12 @@ export const BarPanel: React.FC = () => {
         if (userDoc) {
           const userData = { uid: userDoc.id, ...userDoc } as unknown as UserProfile;
           setUserProfile(userData);
-        } else if (user.email === 'esquina60@esquina60.com') {
-          setUserProfile({ uid: user.id, email: user.email || '', role: 'admin' });
         } else {
           setUserProfile({ uid: user.id, email: user.email || '', role: 'bar' });
         }
       } catch (error) {
         console.error('Error fetching user profile:', error);
-        if (isMounted && user.email === 'esquina60@esquina60.com') {
-          setUserProfile({ uid: user.id, email: user.email || '', role: 'admin' });
-        } else {
-          setUserProfile({ uid: user.id, email: user.email || '', role: 'bar' });
-        }
+        setUserProfile({ uid: user.id, email: user.email || '', role: 'bar' });
       } finally {
         if (isMounted) {
           unsubs = setupDataListeners();
