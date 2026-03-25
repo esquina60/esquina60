@@ -12,14 +12,39 @@ import { Login } from './pages/Login';
 import { Home } from './pages/Home';
 import { UpdateOrderStatus } from './pages/UpdateOrderStatus';
 import { useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-[100dvh] bg-night-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="glass p-8 rounded-3xl border border-red-500/20 max-w-md">
+          <h2 className="text-2xl font-display font-bold text-red-500 mb-4">Configuração Incompleta</h2>
+          <p className="text-white/60 text-sm mb-6 leading-relaxed">
+            As chaves do Supabase não foram encontradas. <br />
+            Certifique-se de configurar as variáveis de ambiente na Vercel.
+          </p>
+          <div className="bg-white/5 p-4 rounded-xl text-left text-[10px] font-mono text-white/40 mb-6">
+            Pendente: VITE_SUPABASE_URL<br />
+            Pendente: VITE_SUPABASE_ANON_KEY
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="btn-primary w-full py-3"
+          >
+            TENTAR NOVAMENTE
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         handleUserResult(null);
