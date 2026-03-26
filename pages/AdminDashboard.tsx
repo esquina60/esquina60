@@ -856,6 +856,9 @@ export const AdminDashboard: React.FC = () => {
                           <option className="bg-night-900 text-white" value="doses de vodka">Doses de Vodka</option>
                           <option className="bg-night-900 text-white" value="cervejas 600ml">Cervejas 600ml</option>
                           <option className="bg-night-900 text-white" value="cervejas long neck">Cervejas Long Neck</option>
+                          <option className="bg-night-900 text-white" value="energeticos">Energéticos</option>
+                          <option className="bg-night-900 text-white" value="refrigerantes">Refrigerantes</option>
+                          <option className="bg-night-900 text-white" value="diversos">Diversos</option>
                         </>
                       )}
                     </select>
