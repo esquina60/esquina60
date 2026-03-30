@@ -7,6 +7,7 @@ export interface Establishment {
   isActive: boolean;
   settings: {
     whatsappNumber: string;
+    challengesEnabled?: boolean;
   };
   createdAt: any;
 }
@@ -45,6 +46,7 @@ export interface Challenge {
   value?: number;
   productName?: string;
   status: 'pending' | 'accepted' | 'declined' | 'completed';
+  message?: string;
   createdAt: any;
 }
 

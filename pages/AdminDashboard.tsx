@@ -18,6 +18,7 @@ import {
   Settings, 
   LogOut, 
   ChevronRight, 
+  Calendar,
   AlertCircle,
   Trophy,
   Megaphone,
@@ -70,8 +71,11 @@ export const AdminDashboard: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [isNightClosureModalOpen, setIsNightClosureModalOpen] = useState(false);
   const [showClosureSuccess, setShowClosureSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'rosh' | 'promotions' | 'staff' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'rosh' | 'promotions' | 'staff' | 'reports' | 'settings'>('overview');
+  const [reportDate, setReportDate] = useState<string>(new Date().toLocaleString("en-CA", {year: "numeric", month: "2-digit", day: "2-digit"}));
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [whatsappRosh, setWhatsappRosh] = useState('');
+  const [challengesEnabled, setChallengesEnabled] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -121,7 +125,11 @@ export const AdminDashboard: React.FC = () => {
         if (initialProducts) setProducts(initialProducts as Product[]);
         if (initialPromos) setPromotions(initialPromos as Promotion[]);
         if (initialStaff) setStaff(initialStaff as Staff[]);
-        if (initialSettings && initialSettings.whatsappNumber) setWhatsappNumber(initialSettings.whatsappNumber);
+        if (initialSettings) {
+          if (initialSettings.whatsappNumber) setWhatsappNumber(initialSettings.whatsappNumber);
+          if (initialSettings.whatsappRosh) setWhatsappRosh(initialSettings.whatsappRosh);
+          if (initialSettings.challengesEnabled !== undefined) setChallengesEnabled(initialSettings.challengesEnabled);
+        }
       };
 
       fetchInitial();
@@ -159,7 +167,11 @@ export const AdminDashboard: React.FC = () => {
       const settingsChannel = supabase.channel('public:settings').on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, async () => {
         if (!isMounted) return;
         const { data } = await supabase.from('settings').select('*').eq('id', 'general').single();
-        if (data && data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
+        if (data) {
+          if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
+          if (data.whatsappRosh) setWhatsappRosh(data.whatsappRosh);
+          if (data.challengesEnabled !== undefined) setChallengesEnabled(data.challengesEnabled);
+        }
       }).subscribe();
 
       return () => {
@@ -209,6 +221,32 @@ export const AdminDashboard: React.FC = () => {
 
     return { totalRevenue, totalOrders, avgTicket, mostConsumed };
   }, [orders]);
+
+  const reportStats = useMemo(() => {
+    const startOfDate = new Date(reportDate + 'T00:00:00');
+    const endOfDate = new Date(reportDate + 'T23:59:59.999');
+    
+    const dayOrders = orders.filter(o => {
+      if (o.status !== 'done') return false;
+      const orderDate = new Date(o.createdAt);
+      return orderDate >= startOfDate && orderDate <= endOfDate;
+    });
+
+    const totalRevenue = dayOrders.reduce((s, o) => s + o.total, 0);
+    const totalOrders = dayOrders.length;
+    const barRevenue = dayOrders.filter(o => o.department === 'bar' || !o.department).reduce((s, o) => s + o.total, 0);
+    const roshRevenue = dayOrders.filter(o => o.department === 'rosh').reduce((s, o) => s + o.total, 0);
+    
+    const camaroteRev: Record<string, number> = {};
+    dayOrders.forEach(o => {
+      camaroteRev[o.camaroteName] = (camaroteRev[o.camaroteName] || 0) + o.total;
+    });
+    const camaroteRanking = Object.entries(camaroteRev)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total);
+
+    return { totalRevenue, totalOrders, barRevenue, roshRevenue, camaroteRanking };
+  }, [orders, reportDate]);
 
   const createCamarote = async () => {
     if (!newCamaroteName) return;
@@ -335,7 +373,9 @@ export const AdminDashboard: React.FC = () => {
     try {
       await supabase.from('settings').upsert({
         id: 'general',
-        whatsappNumber
+        whatsappNumber,
+        whatsappRosh,
+        challengesEnabled
       });
       alert('Configurações salvas com sucesso!');
     } catch (error) {
@@ -527,6 +567,7 @@ export const AdminDashboard: React.FC = () => {
                   { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
                   { id: 'staff', label: 'Funcionários', icon: UserCog },
                   { id: 'promotions', label: 'Promoções', icon: Megaphone },
+                  { id: 'reports', label: 'Relatórios', icon: Calendar },
                   { id: 'settings', label: 'Configurações', icon: Settings },
                 ].map(tab => (
                   <button
@@ -594,6 +635,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
             { id: 'staff', label: 'Funcionários', icon: UserCog },
             { id: 'promotions', label: 'Promoções', icon: Megaphone },
+            { id: 'reports', label: 'Relatórios', icon: Calendar },
             { id: 'settings', label: 'Configurações', icon: Settings },
           ].map(tab => (
             <button
@@ -1281,6 +1323,79 @@ export const AdminDashboard: React.FC = () => {
             </motion.div>
           )}
 
+          {activeTab === 'reports' && (
+            <motion.div
+              key="reports"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">Relatório Diário</h2>
+                    <p className="text-white/40 text-sm">Controle de faturamento por data específica.</p>
+                  </div>
+                  <div className="flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10">
+                    <Calendar className="text-white/40 ml-3" size={20} />
+                    <input
+                      type="date"
+                      value={reportDate}
+                      onChange={(e) => setReportDate(e.target.value)}
+                      className="bg-transparent text-white border-none focus:outline-none p-2 font-bold cursor-pointer [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-3">Faturamento Total</p>
+                    <p className="text-3xl font-bold">{formatCurrency(reportStats.totalRevenue)}</p>
+                  </div>
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-3">Total Pedidos</p>
+                    <p className="text-3xl font-bold">{reportStats.totalOrders}</p>
+                  </div>
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-3">Faturamento Bar</p>
+                    <p className="text-3xl font-bold text-blue-400">{formatCurrency(reportStats.barRevenue)}</p>
+                  </div>
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-3">Faturamento Rosh</p>
+                    <p className="text-3xl font-bold text-zap-400">{formatCurrency(reportStats.roshRevenue)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
+                  <div className="p-6 border-b border-white/5">
+                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Faturamento por Camarote</h3>
+                  </div>
+                  <div className="p-0">
+                    {reportStats.camaroteRanking.length > 0 ? (
+                      <div className="divide-y divide-white/5">
+                        {reportStats.camaroteRanking.map((c, i) => (
+                          <div key={i} className="flex justify-between items-center p-6 hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <span className="text-white/20 font-bold w-6">{i + 1}º</span>
+                              <span className="font-bold">{c.name}</span>
+                            </div>
+                            <span className="font-bold">{formatCurrency(c.total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-10 text-center text-white/40 flex flex-col items-center">
+                        <BarChart3 size={32} className="mb-4 opacity-20" />
+                        <p>Nenhum faturamento registrado nesta data.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'settings' && (
             <motion.div
               key="settings"
@@ -1293,7 +1408,7 @@ export const AdminDashboard: React.FC = () => {
                 <h2 className="text-2xl font-bold mb-6">Configurações do Sistema</h2>
                 <div className="max-w-md space-y-6">
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">WhatsApp para Pedidos</p>
+                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">WhatsApp do Bar (Bebidas)</p>
                     <input
                       type="text"
                       placeholder="Ex: 5511999999999"
@@ -1302,6 +1417,31 @@ export const AdminDashboard: React.FC = () => {
                       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
                     />
                     <p className="text-[10px] text-white/30 ml-4">Inclua o código do país (55 para Brasil) e o DDD.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">WhatsApp do Rosh (Narguilé)</p>
+                    <input
+                      type="text"
+                      placeholder="Ex: 5511988888888"
+                      value={whatsappRosh}
+                      onChange={(e) => setWhatsappRosh(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
+                    />
+                    <p className="text-[10px] text-white/30 ml-4">Número exclusivo para pedidos de Narguilé/Rosh.</p>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-white text-sm">Desafios entre Camarotes</p>
+                      <button
+                        onClick={() => setChallengesEnabled(prev => !prev)}
+                        className={`w-12 h-6 rounded-full flex items-center transition-colors p-1 ${challengesEnabled ? 'bg-emerald-500' : 'bg-white/20'}`}
+                      >
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${challengesEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-white/40 leading-relaxed uppercase tracking-widest font-bold">Quando ativo, clientes podem enviar desafios pela plataforma.</p>
                   </div>
                   
                   <button

@@ -5,7 +5,7 @@ import { Product, Camarote, Order, OrderItem, OperationType, Challenge, Promotio
 import { handleFirestoreError } from '../utils/error-handler';
 import { Ranking } from '../components/Ranking';
 import { Howl } from 'howler';
-import { ShoppingCart, Package, Check, Clock, Plus, Minus, X, AlertCircle, Swords, Trophy, Send, Bell, ChevronRight, MessageSquare } from 'lucide-react';
+import { ShoppingCart, Package, Check, Clock, Plus, Minus, X, AlertCircle, Swords, Trophy, Send, Bell, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from '../components/Logo';
 
@@ -33,6 +33,9 @@ export const ClientView: React.FC = () => {
   const [challengeValue, setChallengeValue] = useState<number>(50);
   const [challengeProduct, setChallengeProduct] = useState<string>('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [whatsappRosh, setWhatsappRosh] = useState('');
+  const [challengesEnabled, setChallengesEnabled] = useState(true);
+  const [challengeMessage, setChallengeMessage] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Todos');
 
   // Fetch all initial data
@@ -74,7 +77,11 @@ export const ClientView: React.FC = () => {
 
       if (!isMounted) return;
 
-      if (settingsData && settingsData.whatsappNumber) setWhatsappNumber(settingsData.whatsappNumber);
+      if (settingsData) {
+        if (settingsData.whatsappNumber) setWhatsappNumber(settingsData.whatsappNumber);
+        if (settingsData.whatsappRosh) setWhatsappRosh(settingsData.whatsappRosh);
+        if (settingsData.challengesEnabled !== undefined) setChallengesEnabled(settingsData.challengesEnabled);
+      }
       if (productsData) setProducts(productsData as Product[]);
       if (ordersData) setOrders(ordersData as Order[]);
       if (otherCamarotesData) setOtherCamarotes(otherCamarotesData as Camarote[]);
@@ -98,7 +105,11 @@ export const ClientView: React.FC = () => {
       const settingsChannel = supabase.channel('client_settings').on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `id=eq.general` }, async () => {
         if (!isMounted) return;
         const { data } = await supabase.from('settings').select('*').eq('id', 'general').maybeSingle();
-        if (data && data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
+        if (data) {
+          if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
+          if (data.whatsappRosh) setWhatsappRosh(data.whatsappRosh);
+          if (data.challengesEnabled !== undefined) setChallengesEnabled(data.challengesEnabled);
+        }
       }).subscribe();
       unsubs.push(() => supabase.removeChannel(settingsChannel));
 
@@ -175,10 +186,12 @@ export const ClientView: React.FC = () => {
         type: challengeType,
         value: challengeType === 'value' ? challengeValue : null,
         productName: challengeType === 'product' ? challengeProduct : null,
+        message: challengeMessage || undefined,
         status: 'pending'
       }]);
       setIsChallengeModalOpen(false);
       setSelectedCamarote(null);
+      setChallengeMessage('');
       alert('Desafio enviado com sucesso!');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'challenges');
@@ -230,10 +243,29 @@ export const ClientView: React.FC = () => {
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
+  const buildWhatsappMessage = (items: OrderItem[], camaroteName: string, notes: string): string => {
+    const itemsText = items.map(item =>
+      `• ${item.quantity}x ${item.name}${item.notes ? ` (Obs: ${item.notes})` : ''}`
+    ).join('\n');
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalText = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return `*PEDIDO REALIZADO - ESQUINA60*\n\n` +
+           `*Camarote:* ${camaroteName}\n\n` +
+           `*Itens:*\n${itemsText}\n\n` +
+           `*Total:* ${totalText}\n` +
+           `${notes ? `*Obs Geral:* ${notes}\n` : ''}`;
+  };
+
+  const openWhatsApp = (number: string, message: string) => {
+    const clean = number.replace(/\D/g, '');
+    if (!clean) return;
+    window.open(`https://wa.me/${clean}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
   const placeOrder = async () => {
     if (!camarote || cart.length === 0) return;
     try {
-      // Group items by department
+      // Separate items by department to create one order per department
       const itemsByDept = cart.reduce((acc, item) => {
         const dept = item.department || 'bar';
         if (!acc[dept]) acc[dept] = [];
@@ -241,50 +273,41 @@ export const ClientView: React.FC = () => {
         return acc;
       }, {} as Record<string, OrderItem[]>);
 
+      // Snapshot data needed for WA messages before clearing cart
+      const camaroteName = camarote.name;
+      const notes = orderNotes;
+
       // Create one order per department
       for (const [dept, items] of Object.entries(itemsByDept)) {
         const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const orderData = {
           camaroteId: camarote.id,
-          camaroteName: camarote.name,
+          camaroteName,
           items,
           status: 'new' as OrderStatus,
           total,
-          notes: orderNotes,
+          notes,
           department: dept as 'bar' | 'rosh',
           establishmentId: 'default'
         };
-        
         const { error } = await supabase.from('orders').insert([orderData]);
         if (error) throw error;
       }
-      
+
+      // Auto-send a unified WhatsApp message
+      if (cart.length > 0 && whatsappNumber) {
+        const msg = buildWhatsappMessage(cart, camaroteName, notes);
+        openWhatsApp(whatsappNumber, msg);
+      }
+
       setCart([]);
       setOrderNotes('');
       setIsCartOpen(false);
       setIsOrdersOpen(true);
-      
+
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'orders');
     }
-  };
-  const sendOrderToWhatsapp = (order: Order) => {
-    if (!whatsappNumber) return;
-    const cleanWhatsapp = whatsappNumber.replace(/\D/g, '');
-    const itemsText = order.items.map(item => `• ${item.quantity}x ${item.name}${item.notes ? ` (Obs: ${item.notes})` : ''}`).join('\n');
-    const totalText = order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const message = `*PEDIDO REALIZADO - ESQUINA60*\n\n` +
-                    `*Camarote:* ${camarote?.name}\n` +
-                    `*Pedido:* #${order.id.slice(-6).toUpperCase()}\n\n` +
-                    `*Itens:*\n${itemsText}\n\n` +
-                    `*Total:* ${totalText}\n` +
-                    `${order.notes ? `*Obs Geral:* ${order.notes}\n` : ''}\n` +
-                    `-------------------\n` +
-                    `Link para acompanhar: ${window.location.href}`;
-    
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${cleanWhatsapp}?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
   };
 
   if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-night-950 text-white font-logo tracking-widest">CARREGANDO...</div>;
@@ -343,12 +366,14 @@ export const ClientView: React.FC = () => {
             <h1 className="text-3xl font-display font-bold text-white mb-2 tracking-tight">Olá, {camarote.name}</h1>
             <p className="text-white/40 text-sm font-medium">Sua experiência premium começa aqui.</p>
           </div>
-          <button
-            onClick={() => setIsChallengeModalOpen(true)}
-            className="glass p-4 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all"
-          >
-            <Swords className="w-6 h-6 text-white" />
-          </button>
+          {challengesEnabled && (
+            <button
+              onClick={() => setIsChallengeModalOpen(true)}
+              className="glass p-4 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all"
+            >
+              <Swords className="w-6 h-6 text-white" />
+            </button>
+          )}
         </header>
 
         {/* Incoming Challenges Alert */}
@@ -372,6 +397,9 @@ export const ClientView: React.FC = () => {
                     <p className="text-sm text-white font-medium">
                       <span className="font-bold">{challenge.fromName}</span> desafiou você
                     </p>
+                    {challenge.message && (
+                      <p className="text-xs text-white/80 italic mt-2 border-l border-white/20 pl-2">"{challenge.message}"</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -387,25 +415,30 @@ export const ClientView: React.FC = () => {
           ))}
         </AnimatePresence>
 
-        {/* Category Tabs */}
-        <div className="flex overflow-x-auto pb-4 mb-6 gap-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          {['Todos', 'NARGUILE ROSH', ...Array.from(new Set(products.filter(p => !p.department || p.department === 'bar').map(p => p.category || 'Outros')))].map(category => (
-            <button
-              key={category}
-              onClick={() => setActiveCategory(category)}
-              className={`whitespace-nowrap px-6 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${
-                activeCategory === category 
-                  ? 'bg-white text-black shadow-lg shadow-white/20' 
-                  : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-col md:flex-row gap-8 items-start">
+          {/* Category Tabs (Sidebar on Desktop, Horizontal on Mobile) */}
+          <div className="w-full md:w-64 shrink-0 md:sticky md:top-6 z-10 space-y-4">
+            <h3 className="hidden md:block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 ml-2">Categorias</h3>
+            <div className="flex overflow-x-auto md:flex-col pb-4 md:pb-0 gap-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+              {['Todos', 'NARGUILE ROSH', ...Array.from(new Set(products.filter(p => !p.department || p.department === 'bar').map(p => p.category || 'Outros')))].map(category => (
+                <button
+                  key={category}
+                  onClick={() => setActiveCategory(category)}
+                  className={`whitespace-nowrap px-6 md:px-5 py-2.5 md:py-4 rounded-full md:rounded-2xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-between ${
+                    activeCategory === category 
+                      ? 'bg-white text-black shadow-lg shadow-white/20 md:scale-[1.02]' 
+                      : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <span>{category}</span>
+                  {activeCategory === category && <ChevronRight className="hidden md:block w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        {/* Menu Grid */}
-        <div className="space-y-10">
+          {/* Menu Grid */}
+          <div className="flex-1 min-w-0 space-y-10">
           {Object.entries(
             products
               .filter(p => {
@@ -466,6 +499,7 @@ export const ClientView: React.FC = () => {
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
 
@@ -670,6 +704,16 @@ export const ClientView: React.FC = () => {
                       )}
                     </div>
 
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Mensagem (Opcional)</label>
+                      <textarea
+                        value={challengeMessage}
+                        onChange={(e) => setChallengeMessage(e.target.value)}
+                        placeholder="Ex: Te vejo no topo!"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white focus:outline-none focus:border-white transition-all h-24 resize-none"
+                      />
+                    </div>
+
                     <button
                       onClick={sendChallenge}
                       className="btn-primary w-full py-5 flex items-center justify-center gap-3"
@@ -758,15 +802,12 @@ export const ClientView: React.FC = () => {
                         <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Total</span>
                         <span className="text-2xl font-display font-bold text-white">R$ {order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                       </div>
-                      
-                      {/* WhatsApp Button */}
-                      {order.status === 'new' && (
-                        <button
-                          onClick={() => sendOrderToWhatsapp(order)}
-                          className="w-full bg-[#25D366] text-white py-3 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-all"
-                        >
-                          <MessageSquare size={16} /> Enviar Pedido via WhatsApp
-                        </button>
+                      {order.department && (
+                        <div className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest text-center ${
+                          order.department === 'rosh' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        }`}>
+                          {order.department === 'rosh' ? '🌿 Narguilé / Rosh' : '🍺 Bar'}
+                        </div>
                       )}
                     </div>
                   </div>

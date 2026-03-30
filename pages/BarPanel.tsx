@@ -357,7 +357,7 @@ export const BarPanel: React.FC = () => {
                           <Check size={16} className="text-emerald-500" />
                         </div>
                         <div className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                          {order.items.length} itens • R$ {order.total.toLocaleString('pt-BR')}
+                          {order.items.reduce((sum, item) => sum + (item.quantity || 1), 0)} itens • R$ {order.total.toLocaleString('pt-BR')}
                         </div>
                       </motion.div>
                     ))}
