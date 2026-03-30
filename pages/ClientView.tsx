@@ -264,8 +264,17 @@ export const ClientView: React.FC = () => {
 
   const placeOrder = async () => {
     if (!camarote || cart.length === 0) return;
+    
+    const camaroteName = camarote.name;
+    const notes = orderNotes;
+
+    // Dispara WhatsApp imediatamente para evitar bloqueio de pop-up do navegador (que ocorre após awaits mutáveis)
+    if (whatsappNumber) {
+      const msg = buildWhatsappMessage(cart, camaroteName, notes);
+      openWhatsApp(whatsappNumber, msg);
+    }
+
     try {
-      // Separate items by department to create one order per department
       const itemsByDept = cart.reduce((acc, item) => {
         const dept = item.department || 'bar';
         if (!acc[dept]) acc[dept] = [];
@@ -273,11 +282,6 @@ export const ClientView: React.FC = () => {
         return acc;
       }, {} as Record<string, OrderItem[]>);
 
-      // Snapshot data needed for WA messages before clearing cart
-      const camaroteName = camarote.name;
-      const notes = orderNotes;
-
-      // Create one order per department
       for (const [dept, items] of Object.entries(itemsByDept)) {
         const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const orderData = {
@@ -292,12 +296,6 @@ export const ClientView: React.FC = () => {
         };
         const { error } = await supabase.from('orders').insert([orderData]);
         if (error) throw error;
-      }
-
-      // Auto-send a unified WhatsApp message
-      if (cart.length > 0 && whatsappNumber) {
-        const msg = buildWhatsappMessage(cart, camaroteName, notes);
-        openWhatsApp(whatsappNumber, msg);
       }
 
       setCart([]);
