@@ -245,7 +245,21 @@ export const AdminDashboard: React.FC = () => {
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
 
-    return { totalRevenue, totalOrders, barRevenue, roshRevenue, camaroteRanking };
+    const productCounts: { [key: string]: { name: string, quantity: number, total: number } } = {};
+    dayOrders.forEach(order => {
+      order.items.forEach(item => {
+        if (!productCounts[item.productId]) {
+          productCounts[item.productId] = { name: item.name, quantity: 0, total: 0 };
+        }
+        productCounts[item.productId].quantity += (item.quantity || 1);
+        productCounts[item.productId].total += ((item.quantity || 1) * item.price);
+      });
+    });
+
+    const productRanking = Object.values(productCounts)
+      .sort((a, b) => b.quantity - a.quantity);
+
+    return { totalRevenue, totalOrders, barRevenue, roshRevenue, camaroteRanking, productRanking };
   }, [orders, reportDate]);
 
   const createCamarote = async () => {
@@ -1369,29 +1383,60 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
-                  <div className="p-6 border-b border-white/5">
-                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Faturamento por Camarote</h3>
-                  </div>
-                  <div className="p-0">
-                    {reportStats.camaroteRanking.length > 0 ? (
-                      <div className="divide-y divide-white/5">
-                        {reportStats.camaroteRanking.map((c, i) => (
-                          <div key={i} className="flex justify-between items-center p-6 hover:bg-white/5 transition-colors">
-                            <div className="flex items-center gap-4">
-                              <span className="text-white/20 font-bold w-6">{i + 1}º</span>
-                              <span className="font-bold">{c.name}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-white/5">
+                      <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Faturamento por Camarote</h3>
+                    </div>
+                    <div className="p-0">
+                      {reportStats.camaroteRanking.length > 0 ? (
+                        <div className="divide-y divide-white/5">
+                          {reportStats.camaroteRanking.map((c, i) => (
+                            <div key={i} className="flex justify-between items-center p-6 hover:bg-white/5 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <span className="text-white/20 font-bold w-6">{i + 1}º</span>
+                                <span className="font-bold">{c.name}</span>
+                              </div>
+                              <span className="font-bold">{formatCurrency(c.total)}</span>
                             </div>
-                            <span className="font-bold">{formatCurrency(c.total)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-10 text-center text-white/40 flex flex-col items-center">
-                        <BarChart3 size={32} className="mb-4 opacity-20" />
-                        <p>Nenhum faturamento registrado nesta data.</p>
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-10 text-center text-white/40 flex flex-col items-center">
+                          <BarChart3 size={32} className="mb-4 opacity-20" />
+                          <p>Nenhum faturamento registrado nesta data.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
+                    <div className="p-6 border-b border-white/5">
+                      <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Produtos Mais Consumidos</h3>
+                    </div>
+                    <div className="p-0">
+                      {reportStats.productRanking.length > 0 ? (
+                        <div className="divide-y divide-white/5">
+                          {reportStats.productRanking.map((p, i) => (
+                            <div key={i} className="flex justify-between items-center p-6 hover:bg-white/5 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <span className="text-white/20 font-bold w-6">{i + 1}º</span>
+                                <div>
+                                  <span className="font-bold block">{p.name}</span>
+                                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{p.quantity} unidades</span>
+                                </div>
+                              </div>
+                              <span className="font-bold text-emerald-400">{formatCurrency(p.total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-10 text-center text-white/40 flex flex-col items-center">
+                          <Package size={32} className="mb-4 opacity-20" />
+                          <p>Nenhum consumo registrado nesta data.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
