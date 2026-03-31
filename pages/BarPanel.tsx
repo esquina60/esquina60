@@ -166,9 +166,11 @@ export const BarPanel: React.FC = () => {
   };
 
   const toggleProductAvailability = async (productId: string, current: boolean) => {
+    setProducts(prev => prev.map(p => p.id === productId ? { ...p, isAvailable: !current } : p));
     try {
       await supabase.from('products').update({ isAvailable: !current }).eq('id', productId);
     } catch (error) {
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, isAvailable: current } : p));
       handleFirestoreError(error, OperationType.UPDATE, `products/${productId}`);
     }
   };

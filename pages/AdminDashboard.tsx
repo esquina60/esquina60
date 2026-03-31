@@ -417,9 +417,11 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const toggleProductAvailability = async (id: string, current: boolean) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, isAvailable: !current } : p));
     try {
       await supabase.from('products').update({ isAvailable: !current }).eq('id', id);
     } catch (error) {
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, isAvailable: current } : p));
       handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
     }
   };
