@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
-import { Camarote, Order, Product, Promotion, OperationType, Staff } from '../types';
+import { Camarote, Order, Product, Promotion, OperationType, Staff, InventoryItem, ShoppingListItem } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
 import { 
   Users, 
@@ -36,7 +36,10 @@ import {
   UserCog,
   MessageSquare,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ShoppingCart,
+  Send,
+  Minus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from '../components/Logo';
@@ -71,11 +74,17 @@ export const AdminDashboard: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [isNightClosureModalOpen, setIsNightClosureModalOpen] = useState(false);
   const [showClosureSuccess, setShowClosureSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'rosh' | 'promotions' | 'staff' | 'reports' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'camarotes' | 'menu' | 'rosh' | 'promotions' | 'staff' | 'reports' | 'settings' | 'inventory'>('overview');
   const [reportDate, setReportDate] = useState<string>(new Date().toLocaleString("en-CA", {year: "numeric", month: "2-digit", day: "2-digit"}));
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappRosh, setWhatsappRosh] = useState('');
+  const [whatsappShoppingList, setWhatsappShoppingList] = useState('');
   const [challengesEnabled, setChallengesEnabled] = useState(true);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
+  const [newInvName, setNewInvName] = useState('');
+  const [newInvCategory, setNewInvCategory] = useState('');
+  const [newInvQuantity, setNewInvQuantity] = useState<number>(0);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -109,14 +118,16 @@ export const AdminDashboard: React.FC = () => {
           { data: initialProducts },
           { data: initialPromos },
           { data: initialStaff },
-          { data: initialSettings }
+          { data: initialSettings },
+          { data: initialInventory }
         ] = await Promise.all([
           supabase.from('camarotes').select('*'),
           supabase.from('orders').select('*'),
           supabase.from('products').select('*'),
           supabase.from('promotions').select('*'),
           supabase.from('staff').select('*'),
-          supabase.from('settings').select('*').eq('id', 'general').single()
+          supabase.from('settings').select('*').eq('id', 'general').single(),
+          supabase.from('inventory').select('*')
         ]);
 
         if (!isMounted) return;
@@ -125,9 +136,11 @@ export const AdminDashboard: React.FC = () => {
         if (initialProducts) setProducts(initialProducts as Product[]);
         if (initialPromos) setPromotions(initialPromos as Promotion[]);
         if (initialStaff) setStaff(initialStaff as Staff[]);
+        if (initialInventory) setInventory(initialInventory as InventoryItem[]);
         if (initialSettings) {
           if (initialSettings.whatsappNumber) setWhatsappNumber(initialSettings.whatsappNumber);
           if (initialSettings.whatsappRosh) setWhatsappRosh(initialSettings.whatsappRosh);
+          if (initialSettings.whatsappShoppingList) setWhatsappShoppingList(initialSettings.whatsappShoppingList);
           if (initialSettings.challengesEnabled !== undefined) setChallengesEnabled(initialSettings.challengesEnabled);
         }
       };
@@ -164,12 +177,19 @@ export const AdminDashboard: React.FC = () => {
         if (data) setStaff(data as Staff[]);
       }).subscribe();
 
+      const inventoryChannel = supabase.channel('public:inventory').on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, async () => {
+        if (!isMounted) return;
+        const { data } = await supabase.from('inventory').select('*');
+        if (data) setInventory(data as InventoryItem[]);
+      }).subscribe();
+
       const settingsChannel = supabase.channel('public:settings').on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, async () => {
         if (!isMounted) return;
         const { data } = await supabase.from('settings').select('*').eq('id', 'general').single();
         if (data) {
           if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
           if (data.whatsappRosh) setWhatsappRosh(data.whatsappRosh);
+          if (data.whatsappShoppingList) setWhatsappShoppingList(data.whatsappShoppingList);
           if (data.challengesEnabled !== undefined) setChallengesEnabled(data.challengesEnabled);
         }
       }).subscribe();
@@ -180,6 +200,7 @@ export const AdminDashboard: React.FC = () => {
         supabase.removeChannel(productsChannel);
         supabase.removeChannel(promosChannel);
         supabase.removeChannel(staffChannel);
+        supabase.removeChannel(inventoryChannel);
         supabase.removeChannel(settingsChannel);
       };
     };
@@ -261,6 +282,53 @@ export const AdminDashboard: React.FC = () => {
 
     return { totalRevenue, totalOrders, barRevenue, roshRevenue, camaroteRanking, productRanking };
   }, [orders, reportDate]);
+
+  const createInventoryItem = async () => {
+    if (!newInvName) return;
+    try {
+      await supabase.from('inventory').insert([{
+        name: newInvName,
+        category: newInvCategory || 'Geral',
+        quantity: newInvQuantity
+      }]);
+      setNewInvName(''); setNewInvCategory(''); setNewInvQuantity(0);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'inventory');
+    }
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    try {
+      await supabase.from('inventory').delete().eq('id', id);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `inventory/${id}`);
+    }
+  };
+
+  const addToShoppingList = (item: InventoryItem) => {
+    setShoppingList(prev => {
+      const existing = prev.find(p => p.id === item.id);
+      if (existing) {
+        return prev.map(p => p.id === item.id ? { ...p, quantity: p.quantity + 1 } : p);
+      }
+      return [...prev, { id: item.id, name: item.name, quantity: 1 }];
+    });
+  };
+
+  const removeFromShoppingList = (id: string) => {
+    setShoppingList(prev => prev.filter(p => p.id !== id));
+  };
+
+  const sendShoppingListWhatsApp = () => {
+    if (shoppingList.length === 0) return alert('Sua lista está vazia!');
+    let message = '*Lista de Compras:*%0A%0A';
+    shoppingList.forEach(i => {
+      message += `${i.quantity}x ${i.name}%0A`;
+    });
+    const cleanNumber = whatsappShoppingList.replace(/\D/g, '');
+    if (!cleanNumber) return alert('Configure o número do WhatsApp de Compras em Configurações.');
+    window.open(`https://wa.me/55${cleanNumber}?text=${message}`, '_blank');
+  };
 
   const createCamarote = async () => {
     if (!newCamaroteName) return;
@@ -389,6 +457,7 @@ export const AdminDashboard: React.FC = () => {
         id: 'general',
         whatsappNumber,
         whatsappRosh,
+        whatsappShoppingList,
         challengesEnabled
       });
       alert('Configurações salvas com sucesso!');
@@ -581,6 +650,7 @@ export const AdminDashboard: React.FC = () => {
                   { id: 'camarotes', label: 'Camarotes', icon: Users },
                   { id: 'menu', label: 'Cardápio Bar', icon: Package },
                   { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
+                  { id: 'inventory', label: 'Estoque', icon: ShoppingCart },
                   { id: 'staff', label: 'Funcionários', icon: UserCog },
                   { id: 'promotions', label: 'Promoções', icon: Megaphone },
                   { id: 'reports', label: 'Relatórios', icon: Calendar },
@@ -649,6 +719,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'camarotes', label: 'Camarotes', icon: Users },
             { id: 'menu', label: 'Cardápio Bar', icon: Package },
             { id: 'rosh', label: 'Cardápio ROSH', icon: Zap },
+            { id: 'inventory', label: 'Estoque', icon: ShoppingCart },
             { id: 'staff', label: 'Funcionários', icon: UserCog },
             { id: 'promotions', label: 'Promoções', icon: Megaphone },
             { id: 'reports', label: 'Relatórios', icon: Calendar },
@@ -1478,6 +1549,18 @@ export const AdminDashboard: React.FC = () => {
                     <p className="text-[10px] text-white/30 ml-4">Número exclusivo para pedidos de Narguilé/Rosh.</p>
                   </div>
 
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-4">WhatsApp (Lista de Compras)</p>
+                    <input
+                      type="text"
+                      placeholder="Ex: 5511977777777"
+                      value={whatsappShoppingList}
+                      onChange={(e) => setWhatsappShoppingList(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
+                    />
+                    <p className="text-[10px] text-white/30 ml-4">Número para enviar a lista gerada pelo estoque.</p>
+                  </div>
+
                   <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <p className="font-bold text-white text-sm">Desafios entre Camarotes</p>
@@ -1498,6 +1581,156 @@ export const AdminDashboard: React.FC = () => {
                   >
                     {isSavingSettings ? 'Salvando...' : 'Salvar Configurações'}
                   </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'inventory' && (
+            <motion.div
+              key="inventory"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl">
+                <h2 className="text-2xl font-bold mb-6">Controle Interno de Estoque</h2>
+
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Left Column - List and Form */}
+                  <div className="flex-1 space-y-8">
+                    {/* Add Item Form */}
+                    <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                      <h3 className="font-bold mb-4 uppercase text-[10px] tracking-widest text-white/40">Novo Item</h3>
+                      <div className="flex flex-col md:flex-row gap-4">
+                        <input
+                          type="text"
+                          placeholder="Nome (ex: Copo 700ml)"
+                          value={newInvName}
+                          onChange={(e) => setNewInvName(e.target.value)}
+                          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/20"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Categoria (ex: Descartáveis)"
+                          value={newInvCategory}
+                          onChange={(e) => setNewInvCategory(e.target.value)}
+                          className="w-full md:w-48 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/20"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Qtd atual"
+                          value={newInvQuantity || ''}
+                          onChange={(e) => setNewInvQuantity(parseInt(e.target.value) || 0)}
+                          className="w-full md:w-32 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/20 appearance-none"
+                        />
+                        <button
+                          onClick={createInventoryItem}
+                          disabled={!newInvName}
+                          className="bg-white text-black px-6 py-3 rounded-xl font-bold hover:bg-white/90 transition-all disabled:opacity-50 min-w-32"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inventory List */}
+                    <div className="space-y-4">
+                      {inventory.map((item) => (
+                        <div key={item.id} className="bg-white/5 border border-white/10 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between group gap-4">
+                          <div>
+                            <p className="font-bold text-white mb-1">{item.name}</p>
+                            <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-white/40">
+                              <span>{item.category}</span>
+                              <div className="w-1 h-1 rounded-full bg-white/20" />
+                              <span>Em Estoque: <b className="text-white">{item.quantity}</b></span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-3 self-end md:self-auto">
+                            <button
+                              onClick={() => addToShoppingList(item)}
+                              className="px-4 py-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-black rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                            >
+                              <Plus size={14} />
+                              Comprar
+                            </button>
+                            <button
+                              onClick={() => deleteInventoryItem(item.id)}
+                              className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors opacity-100 md:opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {inventory.length === 0 && (
+                        <div className="text-center p-8 text-white/20 border border-white/10 border-dashed rounded-3xl">
+                          Nenhum item castrado no estoque.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column - Shopping List */}
+                  <div className="w-full md:w-80 flex flex-col pt-6 md:pt-0">
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex flex-col h-full min-h-[400px]">
+                      <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-3">
+                          <ShoppingCart className="text-emerald-400" size={24} />
+                          <h3 className="font-bold text-emerald-400">Lista de Compras</h3>
+                        </div>
+                        <span className="bg-emerald-500 text-black text-[10px] uppercase tracking-widest font-bold px-3 py-1 rounded-full">
+                          {shoppingList.length} itens
+                        </span>
+                      </div>
+
+                      <div className="flex-1 space-y-3 overflow-y-auto mb-6 custom-scrollbar pr-2 min-h-64">
+                        {shoppingList.map(item => (
+                          <div key={item.id} className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-sm text-white truncate max-w-[140px]">{item.name}</span>
+                              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{item.quantity}x unidades</span>
+                            </div>
+                            <button
+                              onClick={() => removeFromShoppingList(item.id)}
+                              className="p-2 text-white/40 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+                            >
+                              <Minus size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {shoppingList.length === 0 && (
+                          <div className="h-full flex flex-col items-center justify-center text-emerald-400/30">
+                            <ShoppingCart size={32} className="mb-4" />
+                            <p className="text-center text-xs font-bold uppercase tracking-widest">Lista Vazia.<br/>Adicione itens do estoque.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-3 mt-auto">
+                        <button
+                          onClick={sendShoppingListWhatsApp}
+                          disabled={shoppingList.length === 0}
+                          className="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                        >
+                          <Send size={18} />
+                          Enviar no WhatsApp
+                        </button>
+
+                        {shoppingList.length > 0 && (
+                          <button
+                            onClick={() => setShoppingList([])}
+                            className="w-full bg-red-500/10 text-red-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-500 hover:text-white transition-all"
+                          >
+                            <Trash2 size={16} />
+                            Zerar Lista
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>

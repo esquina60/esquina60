@@ -8,8 +8,24 @@ export interface Establishment {
   settings: {
     whatsappNumber: string;
     challengesEnabled?: boolean;
+    whatsappShoppingList?: string;
   };
   createdAt: any;
+}
+
+export interface InventoryItem {
+  id: string;
+  establishmentId: string;
+  name: string;
+  category: string;
+  quantity: number;
+  created_at: any;
+}
+
+export interface ShoppingListItem {
+  id: string;
+  name: string;
+  quantity: number;
 }
 
 export interface Product {
