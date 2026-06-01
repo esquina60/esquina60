@@ -98,8 +98,9 @@ export const BarPanel: React.FC = () => {
         return;
       }
 
-      // Start listening to orders immediately!
+      // Start listening to data
       unsubs = setupDataListeners();
+      
       try {
         const { data: userDoc } = await supabase.from('users').select('*').eq('id', user.id).single();
         if (!isMounted) return;
@@ -113,10 +114,6 @@ export const BarPanel: React.FC = () => {
       } catch (error) {
         console.error('Error fetching user profile:', error);
         setUserProfile({ uid: user.id, email: user.email || '', role: 'bar' });
-      } finally {
-        if (isMounted) {
-          unsubs = setupDataListeners();
-        }
       }
     };
 

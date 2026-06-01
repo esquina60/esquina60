@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { LogIn, ShieldCheck, ArrowLeft, Zap } from 'lucide-react';
 import { Logo } from '../components/Logo';
+
+// ⚠️ MODO DE TESTE: Remover antes de subir para produção final
+const IS_DEV_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -10,6 +13,27 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // ⚠️ APENAS PARA TESTE LOCAL - Remover antes de produção
+  const loginAsTester = async (userEmail: string, destination: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: 'teste123@Esquina60',
+      });
+      if (authError || !data.user) {
+        setError(`Não foi possível fazer login de teste. Verifique se a senha padrão de teste foi configurada para ${userEmail}.`);
+        setLoading(false);
+        return;
+      }
+      navigate(destination);
+    } catch (err) {
+      setError('Erro ao tentar login de teste.');
+      setLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -144,6 +168,35 @@ export const Login: React.FC = () => {
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" className="w-5 h-5" />
             <span>GOOGLE</span>
           </button>
+
+          {/* ⚠️ BOTÕES DE TESTE - Apenas em localhost, remover antes de produção */}
+          {IS_DEV_MODE && (
+            <div className="mt-8 pt-6 border-t border-amber-500/20">
+              <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-amber-500/80 mb-4 flex items-center justify-center gap-2">
+                <Zap size={12} />
+                Acesso Rápido de Teste (Somente Local)
+                <Zap size={12} />
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => loginAsTester('esquinaadm@esquina60.com', '/admin')}
+                  disabled={loading}
+                  className="w-full py-4 rounded-2xl font-bold uppercase tracking-widest text-xs bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck size={16} />
+                  Entrar como ADMIN
+                </button>
+                <button
+                  onClick={() => loginAsTester('esquinabar@esquina60.com', '/bar')}
+                  disabled={loading}
+                  className="w-full py-4 rounded-2xl font-bold uppercase tracking-widest text-xs bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                >
+                  <LogIn size={16} />
+                  Entrar como BAR
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

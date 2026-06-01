@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from '../components/Logo';
+import { FloorPlanMap } from '../components/FloorPlanMap';
 
 export const AdminDashboard: React.FC = () => {
   const [camarotes, setCamarotes] = useState<Camarote[]>([]);
@@ -50,6 +51,10 @@ export const AdminDashboard: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [newCamaroteName, setNewCamaroteName] = useState('');
+  const [newCamaroteMinConsumption, setNewCamaroteMinConsumption] = useState<number>(0);
+  const [selectedMapSlug, setSelectedMapSlug] = useState<string | null>(null);
+  const [mapCustomClientName, setMapCustomClientName] = useState('');
+  const [mapMinConsumption, setMapMinConsumption] = useState<number>(0);
   const [newPromoTitle, setNewPromoTitle] = useState('');
   const [newPromoDesc, setNewPromoDesc] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -338,9 +343,30 @@ export const AdminDashboard: React.FC = () => {
         name: newCamaroteName,
         slug,
         totalSpent: 0,
+        minConsumption: newCamaroteMinConsumption || 0,
         isActive: true
       }]);
       setNewCamaroteName('');
+      setNewCamaroteMinConsumption(0);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'camarotes');
+    }
+  };
+
+  const openCamaroteFromMap = async (slug: string, customName?: string) => {
+    const baseName = slug.startsWith('mesa-') ? `Mesa ${slug.split('-')[1]}` : slug.toUpperCase();
+    const displayName = customName ? `${baseName} (${customName.toUpperCase()})` : baseName;
+    try {
+      await supabase.from('camarotes').insert([{
+        name: displayName,
+        slug,
+        totalSpent: 0,
+        minConsumption: mapMinConsumption || 0,
+        isActive: true,
+        establishmentId: 'default'
+      }]);
+      setMapCustomClientName('');
+      setMapMinConsumption(0);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'camarotes');
     }
@@ -820,83 +846,204 @@ export const AdminDashboard: React.FC = () => {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                  <h2 className="text-2xl font-bold mb-1">Gestão de Camarotes</h2>
-                  <p className="text-white/40 text-sm">Controle de acesso e consumo em tempo real.</p>
+                  <h2 className="text-2xl font-bold mb-1">Mapa de Ocupação & Camarotes</h2>
+                  <p className="text-white/40 text-sm">Gerenciamento visual de consumo e acesso por mesa ou camarote.</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
                   <input
                     type="text"
-                    placeholder="Nome do Camarote"
+                    placeholder="Nome do camarote avulso..."
                     value={newCamaroteName}
                     onChange={(e) => setNewCamaroteName(e.target.value)}
                     className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all w-full md:w-64"
                   />
+                  <input
+                    type="number"
+                    placeholder="Consumação (R$)..."
+                    value={newCamaroteMinConsumption || ''}
+                    onChange={(e) => setNewCamaroteMinConsumption(Number(e.target.value))}
+                    className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/20 transition-all w-full md:w-44"
+                  />
                   <button
                     onClick={createCamarote}
-                    className="bg-white text-black px-8 py-3 rounded-2xl font-bold hover:bg-white/90 transition-all flex items-center gap-2 whitespace-nowrap"
+                    className="bg-white text-black px-8 py-3 rounded-2xl font-bold hover:bg-white/90 transition-all flex items-center justify-center gap-2 whitespace-nowrap w-full md:w-auto"
                   >
-                    <Plus size={20} /> Criar
+                    <Plus size={20} /> Criar Avulso
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {camarotes
-                  .filter(c => c.isActive !== false)
-                  .sort((a, b) => b.totalSpent - a.totalSpent)
-                  .map((camarote) => (
-                    <div key={camarote.id} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl hover:border-white/20 transition-all group">
-                      <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                            <Users className="text-white/40" size={24} />
-                          </div>
+              {/* Two column layout: Map on left, Details on right */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* SVG Interactive Map */}
+                <div className="lg:col-span-8 w-full">
+                  <FloorPlanMap
+                    activeCamarotes={camarotes}
+                    selectedSlug={selectedMapSlug}
+                    onSelect={(slug) => {
+                      setSelectedMapSlug(slug);
+                    }}
+                    mode="admin"
+                  />
+                </div>
+
+                {/* Details / Action Panel */}
+                <div className="lg:col-span-4 w-full">
+                  <AnimatePresence mode="wait">
+                    {(() => {
+                      if (!selectedMapSlug) {
+                        return (
+                          <motion.div
+                            key="no-selection"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] text-center backdrop-blur-xl h-[400px] flex flex-col items-center justify-center"
+                          >
+                            <Users className="text-white/20 mb-4" size={48} />
+                            <h3 className="text-lg font-bold mb-2">Nenhum local selecionado</h3>
+                            <p className="text-white/40 text-xs leading-relaxed max-w-[240px] mx-auto">
+                              Clique em qualquer mesa ou camarote no mapa para visualizar os detalhes, copiar o link de acesso ou abrir uma nova conta.
+                            </p>
+                          </motion.div>
+                        );
+                      }
+
+                      // Find active camarote matching the selected slug
+                      const activeCam = camarotes.find(c => c.slug === selectedMapSlug && c.isActive !== false);
+                      const baseName = selectedMapSlug.startsWith('mesa-') ? `Mesa ${selectedMapSlug.split('-')[1]}` : selectedMapSlug.toUpperCase();
+
+                      if (activeCam) {
+                        return (
+                          <motion.div
+                            key="active-selection"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl space-y-6"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                                  Conta Aberta
+                                </span>
+                                <h3 className="text-2xl font-bold mt-3 leading-tight">{activeCam.name}</h3>
+                                <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1">ID: {activeCam.id.slice(0, 8)}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => copyLink(activeCam.slug, activeCam.id)}
+                                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all border ${
+                                    copiedId === activeCam.id 
+                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
+                                    : 'bg-white/5 border-white/10 text-white/40 hover:text-white'
+                                  }`}
+                                  title="Copiar link"
+                                >
+                                  {copiedId === activeCam.id ? <Check size={18} /> : <Copy size={18} />}
+                                </button>
+                                <button
+                                  onClick={() => setCamaroteToDelete(activeCam)}
+                                  className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-white/25 hover:text-red-500 flex items-center justify-center transition-all"
+                                  title="Excluir camarote"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/5 p-6 rounded-3xl border border-white/5 space-y-1">
+                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">Consumo Parcial</p>
+                              <p className="text-3xl font-display font-black text-white">{formatCurrency(activeCam.totalSpent || 0)}</p>
+                            </div>
+
+                            {activeCam.minConsumption > 0 && (
+                              <div className="bg-white/5 p-6 rounded-3xl border border-white/5 space-y-2">
+                                <div className="flex justify-between items-center text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">
+                                  <span>Consumação Mínima</span>
+                                  <span className="text-white">{formatCurrency(activeCam.minConsumption)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] pt-2 border-t border-white/5">
+                                  <span>Saldo Restante</span>
+                                  <span className={activeCam.totalSpent >= activeCam.minConsumption ? "text-emerald-500 font-bold" : "text-amber-500 font-bold"}>
+                                    {activeCam.totalSpent >= activeCam.minConsumption ? "Atingida! 🎉" : formatCurrency(activeCam.minConsumption - activeCam.totalSpent)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-col gap-3">
+                              <a
+                                href={`${window.location.origin}/camarote/${activeCam.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full bg-white/5 border border-white/10 hover:bg-white/10 text-white py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest text-center"
+                              >
+                                <ExternalLink size={16} /> Ver Painel do Cliente
+                              </a>
+                              <button
+                                onClick={() => setClosingCamarote(activeCam)}
+                                className="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-red-500/10 flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                              >
+                                <Power size={16} /> Fechar Conta / Checkout
+                              </button>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      // Inactive selection
+                      return (
+                        <motion.div
+                          key="inactive-selection"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl space-y-6"
+                        >
                           <div>
-                            <h3 className="text-xl font-bold">{camarote.name}</h3>
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1">ID: {camarote.id.slice(0, 4)}</p>
+                            <span className="bg-zinc-800 text-zinc-400 border border-zinc-700 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                              Mesa / Camarote Vago
+                            </span>
+                            <h3 className="text-2xl font-bold mt-3 leading-tight">Abrir {baseName}</h3>
+                            <p className="text-white/40 text-xs mt-1">Este local está vago no momento. Abra a conta para habilitar pedidos.</p>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => copyLink(camarote.slug, camarote.id)}
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all border ${
-                              copiedId === camarote.id 
-                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
-                              : 'bg-white/5 border-white/10 text-white/40 hover:text-white'
-                            }`}
-                          >
-                            {copiedId === camarote.id ? <Check size={18} /> : <Copy size={18} />}
-                          </button>
-                          <button
-                            onClick={() => setClosingCamarote(camarote)}
-                            className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all"
-                          >
-                            <Power size={18} />
-                          </button>
-                          <button
-                            onClick={() => setCamaroteToDelete(camarote)}
-                            className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-white/20 hover:text-red-500 flex items-center justify-center transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/5 p-5 rounded-3xl border border-white/5">
-                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-2">Consumo</p>
-                          <p className="text-lg font-bold">{formatCurrency(camarote.totalSpent || 0)}</p>
-                        </div>
-                        <div className="bg-white/5 p-5 rounded-3xl border border-white/5">
-                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-2">Status</p>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.1em]">Ativo</p>
+
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Nome do Cliente (Opcional)</label>
+                              <input
+                                type="text"
+                                placeholder="Ex: Lucas Silva"
+                                value={mapCustomClientName}
+                                onChange={(e) => setMapCustomClientName(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Consumação Mínima (R$ - Opcional)</label>
+                              <input
+                                type="number"
+                                placeholder="Ex: 500"
+                                value={mapMinConsumption || ''}
+                                onChange={(e) => setMapMinConsumption(Number(e.target.value))}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:outline-none focus:border-white/20 transition-all"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+
+                          <button
+                            onClick={() => openCamaroteFromMap(selectedMapSlug, mapCustomClientName)}
+                            className="w-full bg-white text-black hover:bg-white/90 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                          >
+                            <Plus size={18} /> Abrir Conta de Local
+                          </button>
+                        </motion.div>
+                      );
+                    })()}
+                  </AnimatePresence>
+                </div>
               </div>
 
               {/* Closed Camarotes Section */}

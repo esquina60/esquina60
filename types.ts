@@ -46,6 +46,7 @@ export interface Camarote {
   name: string;
   slug: string;
   totalSpent: number;
+  minConsumption: number;
   isActive: boolean;
   createdAt: any;
   lastOrderAt?: any;

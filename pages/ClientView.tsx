@@ -4,6 +4,7 @@ import { supabase } from '../supabase';
 import { Product, Camarote, Order, OrderItem, OperationType, Challenge, Promotion, OrderStatus } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
 import { Ranking } from '../components/Ranking';
+import { FloorPlanMap } from '../components/FloorPlanMap';
 import { Howl } from 'howler';
 import { ShoppingCart, Package, Check, Clock, Plus, Minus, X, AlertCircle, Swords, Trophy, Send, Bell, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -34,6 +35,7 @@ export const ClientView: React.FC = () => {
   const [challengeProduct, setChallengeProduct] = useState<string>('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappRosh, setWhatsappRosh] = useState('');
+  const [whatsappShoppingList, setWhatsappShoppingList] = useState('');
   const [challengesEnabled, setChallengesEnabled] = useState(true);
   const [challengeMessage, setChallengeMessage] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Todos');
@@ -47,7 +49,13 @@ export const ClientView: React.FC = () => {
       if (!slug) return;
 
       // 1. Fetch camarote by slug
-      const { data: camaroteData } = await supabase.from('camarotes').select('*').eq('slug', slug).single();
+      const { data: camaroteData } = await supabase
+        .from('camarotes')
+        .select('*')
+        .eq('slug', slug)
+        .order('createdAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (!isMounted) return;
       if (camaroteData) {
         setCamarote(camaroteData as Camarote);
@@ -80,6 +88,7 @@ export const ClientView: React.FC = () => {
       if (settingsData) {
         if (settingsData.whatsappNumber) setWhatsappNumber(settingsData.whatsappNumber);
         if (settingsData.whatsappRosh) setWhatsappRosh(settingsData.whatsappRosh);
+        if (settingsData.whatsappShoppingList) setWhatsappShoppingList(settingsData.whatsappShoppingList);
         if (settingsData.challengesEnabled !== undefined) setChallengesEnabled(settingsData.challengesEnabled);
       }
       if (productsData) setProducts(productsData as Product[]);
@@ -108,6 +117,7 @@ export const ClientView: React.FC = () => {
         if (data) {
           if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
           if (data.whatsappRosh) setWhatsappRosh(data.whatsappRosh);
+          if (data.whatsappShoppingList) setWhatsappShoppingList(data.whatsappShoppingList);
           if (data.challengesEnabled !== undefined) setChallengesEnabled(data.challengesEnabled);
         }
       }).subscribe();
@@ -243,17 +253,35 @@ export const ClientView: React.FC = () => {
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
-  const buildWhatsappMessage = (items: OrderItem[], camaroteName: string, notes: string): string => {
+  const buildWhatsappMessage = (items: OrderItem[], camaroteName: string, notes: string, currentCamarote: Camarote | null): string => {
     const itemsText = items.map(item =>
       `• ${item.quantity}x ${item.name}${item.notes ? ` (Obs: ${item.notes})` : ''}`
     ).join('\n');
     const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const totalText = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    let consumptionText = '';
+    if (currentCamarote && currentCamarote.minConsumption > 0) {
+      const minCons = currentCamarote.minConsumption;
+      const prevSpent = currentCamarote.totalSpent || 0;
+      const accumulated = prevSpent + total;
+      const remaining = Math.max(0, minCons - accumulated);
+      
+      consumptionText = `\n*Acompanhamento de Consumação Mínima:*\n` +
+                        `• Consumação Mínima: ${minCons.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n` +
+                        `• Consumido Anterior: ${prevSpent.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n` +
+                        `• Este Pedido: ${totalText}\n` +
+                        `• Acumulado Total: ${accumulated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n` +
+                        `• Saldo Restante: ${remaining.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n` +
+                        `(O valor deste pedido está sendo abatido da consumação mínima)\n`;
+    }
+
     return `*PEDIDO REALIZADO - ESQUINA60*\n\n` +
            `*Camarote:* ${camaroteName}\n\n` +
            `*Itens:*\n${itemsText}\n\n` +
            `*Total:* ${totalText}\n` +
-           `${notes ? `*Obs Geral:* ${notes}\n` : ''}`;
+           consumptionText +
+           `${notes ? `\n*Obs Geral:* ${notes}\n` : ''}`;
   };
 
   const openWhatsApp = (number: string, message: string) => {
@@ -268,19 +296,24 @@ export const ClientView: React.FC = () => {
     const camaroteName = camarote.name;
     const notes = orderNotes;
 
-    // Dispara WhatsApp imediatamente para evitar bloqueio de pop-up do navegador (que ocorre após awaits mutáveis)
-    if (whatsappNumber) {
-      const msg = buildWhatsappMessage(cart, camaroteName, notes);
-      openWhatsApp(whatsappNumber, msg);
+    // Split cart into departments to send individual WhatsApp messages
+    const itemsByDept = cart.reduce((acc, item) => {
+      const dept = item.department || 'bar';
+      if (!acc[dept]) acc[dept] = [];
+      acc[dept].push(item);
+      return acc;
+    }, {} as Record<string, OrderItem[]>);
+
+    // Send WhatsApp messages for each department
+    for (const [dept, items] of Object.entries(itemsByDept)) {
+      const targetNumber = dept === 'rosh' ? whatsappRosh : whatsappNumber;
+      if (targetNumber) {
+        const msg = buildWhatsappMessage(items, camaroteName, notes, camarote);
+        openWhatsApp(targetNumber, msg);
+      }
     }
 
     try {
-      const itemsByDept = cart.reduce((acc, item) => {
-        const dept = item.department || 'bar';
-        if (!acc[dept]) acc[dept] = [];
-        acc[dept].push(item);
-        return acc;
-      }, {} as Record<string, OrderItem[]>);
 
       for (const [dept, items] of Object.entries(itemsByDept)) {
         const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -331,7 +364,7 @@ export const ClientView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-night-950 pb-32">
+    <div className="min-h-[100dvh] bg-night-950 pb-20 md:pb-28">
       <Ranking />
 
       {/* Promotion Banner */}
@@ -373,6 +406,38 @@ export const ClientView: React.FC = () => {
             </button>
           )}
         </header>
+
+        {camarote.minConsumption > 0 && (
+          <div className="mb-10 glass p-6 rounded-[2rem] border border-white/10 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div>
+                <p className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mb-1">Consumação Mínima</p>
+                <p className="text-2xl font-display font-bold text-white">
+                  R$ {camarote.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} 
+                  <span className="text-white/30 text-sm font-medium"> / R$ {camarote.minConsumption.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mb-1">
+                  {camarote.totalSpent >= camarote.minConsumption ? 'Status Consumação' : 'Saldo Restante'}
+                </p>
+                <p className={`text-lg font-bold ${camarote.totalSpent >= camarote.minConsumption ? 'text-emerald-500' : 'text-amber-500'}`}>
+                  {camarote.totalSpent >= camarote.minConsumption 
+                    ? 'Atingida! 🎉' 
+                    : `Faltam R$ ${(camarote.minConsumption - camarote.totalSpent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                  }
+                </p>
+              </div>
+            </div>
+            {/* Progress Bar */}
+            <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
+              <div 
+                className={`h-full transition-all duration-500 rounded-full ${camarote.totalSpent >= camarote.minConsumption ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                style={{ width: `${Math.min(100, (camarote.totalSpent / camarote.minConsumption) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Incoming Challenges Alert */}
         <AnimatePresence>
@@ -502,15 +567,15 @@ export const ClientView: React.FC = () => {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 glass-dark border-t border-white/5 p-6 flex justify-around items-center z-40 pb-8">
+      <div className="fixed bottom-0 left-0 right-0 glass-dark border-t border-white/5 py-3 px-6 pb-4 flex justify-around items-center z-40">
         <button
           onClick={() => setIsOrdersOpen(true)}
-          className={`flex flex-col items-center gap-2 transition-all ${isOrdersOpen ? 'text-white' : 'text-white/40'}`}
+          className={`flex flex-col items-center gap-1 transition-all ${isOrdersOpen ? 'text-white' : 'text-white/40'}`}
         >
           <div className="relative">
-            <Package size={24} />
+            <Package size={22} />
             {orders.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-white text-black text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-black">
+              <span className="absolute -top-1.5 -right-1.5 bg-white text-black text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-black">
                 {orders.length}
               </span>
             )}
@@ -520,12 +585,12 @@ export const ClientView: React.FC = () => {
 
         <button
           onClick={() => setIsCartOpen(true)}
-          className={`flex flex-col items-center gap-2 transition-all ${isCartOpen ? 'text-white' : 'text-white/40'}`}
+          className={`flex flex-col items-center gap-1 transition-all ${isCartOpen ? 'text-white' : 'text-white/40'}`}
         >
           <div className="relative">
-            <ShoppingCart size={24} />
+            <ShoppingCart size={22} />
             {cart.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-white text-black text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-black">
+              <span className="absolute -top-1.5 -right-1.5 bg-white text-black text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-black">
                 {cart.reduce((s, i) => s + i.quantity, 0)}
               </span>
             )}
@@ -638,20 +703,21 @@ export const ClientView: React.FC = () => {
               
               <div className="p-8 space-y-8">
                 <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Selecione o Oponente</label>
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Selecione o Oponente no Mapa</label>
+                  <div className="w-full">
                     {otherCamarotes.length === 0 ? (
-                      <p className="col-span-2 text-center py-8 text-white/20 text-xs italic font-medium">Nenhum outro camarote ativo.</p>
+                      <p className="text-center py-8 text-white/20 text-xs italic font-medium">Nenhum outro camarote ativo.</p>
                     ) : (
-                      otherCamarotes.map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => setSelectedCamarote(c)}
-                          className={`p-4 rounded-xl border text-xs font-bold transition-all uppercase tracking-widest ${selectedCamarote?.id === c.id ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40 hover:border-white/20'}`}
-                        >
-                          {c.name}
-                        </button>
-                      ))
+                      <FloorPlanMap
+                        activeCamarotes={otherCamarotes}
+                        selectedSlug={selectedCamarote?.slug || null}
+                        onSelect={(slug) => {
+                          const found = otherCamarotes.find(c => c.slug === slug);
+                          if (found) setSelectedCamarote(found);
+                        }}
+                        mode="client"
+                        ownCabinSlug={camarote?.slug}
+                      />
                     )}
                   </div>
                 </div>
