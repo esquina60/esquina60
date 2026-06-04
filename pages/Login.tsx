@@ -21,7 +21,7 @@ export const Login: React.FC = () => {
     try {
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: userEmail,
-        password: 'teste123@Esquina60',
+        password: '102030esquina',
       });
       if (authError || !data.user) {
         setError(`Não foi possível fazer login de teste. Verifique se a senha padrão de teste foi configurada para ${userEmail}.`);
